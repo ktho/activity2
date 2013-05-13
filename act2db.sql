@@ -130,48 +130,69 @@ delete from act2.work_log_temp wlt
 	where wlt.did in (select d.did from act2.device d);
 
 
+-------------------------------------------------------------------------------------------
+
 
 CREATE TABLE act2.log (
 	id 		SERIAL PRIMARY KEY,
+	name		varchar(64),
 	starttime	timestamp,
 	endtime		timestamp,
 	query		text
 );
 
 
-
 CREATE OR REPLACE FUNCTION act2.logquery (
+	p_query text,
+	p_name varchar(64),
+	p_testnumber int
 )
 RETURNS VOID AS $PROC$	
 DECLARE 
 	st timestamp;
 	ed timestamp;
-	query text;
 	testnumber int;
 	testcount int;
 BEGIN
-	testnumber:= 10;
-
 	testcount:=0;
 
 	LOOP
-		st:= (select date_trunc('milliseconds', now()) as "start");
 
-		query:= ('select count(e), sum(e) from act2.work_log where did=143 and timelogged between ''2007-10-01 08:30:00-07'' and ''2007-10-01 09:30:00-07'';');
-		perform count(e), sum(e) from act2.work_log where did=143 and timelogged between '2007-10-01 08:30:00-07' and '2007-10-01 09:30:00-07';
+		st:= (select date_trunc('milliseconds', clock_timestamp()) as "start");
+		EXECUTE (p_query);
+		ed:= (select date_trunc('milliseconds', clock_timestamp()) as "end");
 
-		ed:= (select date_trunc('milliseconds', now()) as "end");
-
-		INSERT INTO act2.log (starttime, query, endtime) values (st, query, ed);
+		INSERT INTO act2.log (name, starttime, endtime, query) values (p_name, st, ed, p_query);
 
 		testcount:= testcount+1;
 		
-		EXIT WHEN testcount > testnumber;
+		EXIT WHEN testcount > p_testnumber-1;
 	END LOOP;
 END;
 $PROC$ LANGUAGE plpgsql; 
 
 
-select act2.logquery();
+-------------------------------------------------------------------------------------------
 
 
+select act2.logquery(
+		format('select count(e), sum(e) from act2.work_log where did=143 and timelogged between ''2007-10-01 08:30:00-07'' and ''2007-10-01 09:30:00-07''')
+		, 'query1-original'
+		, '10'
+		);
+
+
+select l.endtime-l.starttime, l.* from act2.log l;
+
+select * from act2.log l
+
+select avg(l.endtime-l.starttime), l.name
+	from act2.log l
+	group by l.name;
+
+explain analyze select count(e), sum(e) from act2.work_log where did=143 and timelogged between '2007-10-01 08:30:00-07' and '2007-10-01 09:30:00-07'
+
+/*
+DELETE FROM act2.log;
+DROP TABLE act2.log;
+*/
